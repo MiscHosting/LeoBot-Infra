@@ -1,0 +1,111 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:14
+    container_name: postgres
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: lion_data
+    ports:
+      - "5432:5432"
+    command: ["postgres", "-c", "unix_socket_directories=/var/run/postgresql"]
+    # source: https://www.reddit.com/r/selfhosted/comments/vf6jeg/i_used_unix_sockets_to_improve_the_performance_of/
+    volumes:
+      - pg-socket:/var/run/postgresql/
+
+  postgres-init:
+    image: postgres:14
+    container_name: postgres-init
+    volumes:
+      - ./scripts/init_db.sh:/init_db.sh
+      - ./app/data:/app/data
+      - pg-socket:/var/run/postgresql/
+    command: ["/bin/bash", "/init_db.sh"]
+    depends_on:
+      - postgres
+
+  change_gui_socket_permissions:
+    image: busybox
+    container_name: change_gui_socket_permissions
+    volumes:
+      - gui-socket:/gui-socket/
+    command: ["/bin/sh", "-c", "chown -R 10001:10001 /gui-socket/; rm -rf /gui-socket/gui.sock"]  # uid of appuser defined in Dockerfile & cleanup
+
+  gui_server:
+    build:
+      context: app
+      dockerfile: ../docker/Dockerfile
+    image: leobot
+    command: ["python", "scripts/start_gui.py", "--conf", "/bot_config"]
+    depends_on:
+      - postgres
+      - change_gui_socket_permissions
+    configs:
+      - bot_config
+      - emoji_config
+      - gui_config
+    secrets:
+      - bot_secret
+    volumes:
+      - gui-socket:/gui-socket/
+      - ./app/skins:/app/skins
+
+  registry_server:
+    build:
+      context: app
+      dockerfile: ../docker/Dockerfile
+    image: leobot
+    command: ["python", "scripts/start_registry.py", "--conf", "/bot_config"]
+    # ports:
+    #   - "5000:5000"
+    network_mode: host
+    depends_on:
+      - postgres
+    configs:
+      - bot_config
+      - emoji_config
+      - gui_config
+    secrets:
+      - bot_secret
+
+  leobot_app:
+    build:
+      context: app
+      dockerfile: ../docker/Dockerfile
+    image: leobot
+    command: ["python", "scripts/start_leo.py", "--conf", "/bot_config", "--host", "127.0.0.1", "--port", "5001"]
+    # ports:
+    #   - "5001:5001"
+    network_mode: host
+    depends_on:
+      - postgres
+      - postgres-init
+      - gui_server
+      - registry_server
+    configs:
+      - bot_config
+      - emoji_config
+      - gui_config
+    secrets:
+      - bot_secret
+    volumes:
+      - pg-socket:/var/run/postgresql/
+      - gui-socket:/gui-socket/
+
+configs:
+  bot_config:
+    file: ./config/bot.conf
+  emoji_config:
+    file: ./config/emojis.conf
+  gui_config:
+    file: ./config/gui.conf
+
+secrets:
+  bot_secret:
+    file: ./secrets/secrets.conf
+
+volumes:
+  gui-socket:
+  pg-socket:
