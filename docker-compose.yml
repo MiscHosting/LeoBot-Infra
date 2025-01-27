@@ -70,6 +70,30 @@ services:
     secrets:
       - bot_secret
 
+  leobot_app_dev:
+    build:
+      context: app
+      dockerfile: ../docker/DevDockerfile
+    image: leobot_dev
+    container_name: leobot_app_dev
+    command: ["bash"]
+    ports:
+      - "5002:5002"  # Adjust for your app if needed
+      - "40000:40000"  # Debugging port for VSCode
+    environment:
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./app:/app  # Mount the app directory for development
+      - ./config:/config  # Mount the config directory for development
+      - ./scripts:/scripts  # Mount scripts for easier testing
+      - pg-socket:/var/run/postgresql/
+    depends_on:
+      - postgres
+      - postgres-init
+    tty: true  # Keeps the container interactive for debugging
+    networks:
+      - default  # Default network for communication
+
   leobot_app:
     build:
       context: app
