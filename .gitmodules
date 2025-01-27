@@ -1,3 +1,6 @@
 [submodule "app"]
 	path = app
 	url = git@github.com:MiscHosting/LeoBot.git
+[submodule "go-app"]
+	path = go-app
+	url = https://github.com/MiscHosting/LeoBot-Go.git
